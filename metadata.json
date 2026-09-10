@@ -1,0 +1,6 @@
+{
+  "name": "PackScan - AI Legal Metrology Compliance",
+  "description": "AI-powered Legal Metrology (Packaged Commodities) Rules 2011 compliance verification system for the Department of Consumer Affairs, Government of India.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

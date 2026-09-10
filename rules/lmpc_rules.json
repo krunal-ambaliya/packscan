@@ -1,0 +1,156 @@
+{
+  "version": "2024.1",
+  "statute": "Legal Metrology (Packaged Commodities) Rules, 2011",
+  "enacted_by": "Department of Consumer Affairs, Ministry of Consumer Affairs, Food and Public Distribution, Government of India",
+  "rules": [
+    {
+      "id": "RULE_6_1_A",
+      "clause": "Rule 6(1)(a)",
+      "field": "manufacturer_info",
+      "title": "Name and Complete Address of Manufacturer / Packer / Importer",
+      "severity": "CRITICAL",
+      "description": "Every package shall bear the name and complete postal address of the manufacturer, or where the manufacturer is not the packer, the name and address of the manufacturer and packer, or for imported goods, the name and address of the importer.",
+      "required": true,
+      "validation_type": "address_presence",
+      "keywords_required": ["mfg", "manufactured", "packed", "marketed", "imported", "address"],
+      "pincode_required": true,
+      "expected": "Complete physical address with city, state, and 6-digit PIN code"
+    },
+    {
+      "id": "RULE_6_1_B",
+      "clause": "Rule 6(1)(b)",
+      "field": "commodity_name",
+      "title": "Generic or Common Name of the Commodity",
+      "severity": "MAJOR",
+      "description": "The common or generic names of the commodity contained in the package and in case of packages with more than one product, the name and quantity of each product shall be mentioned.",
+      "required": true,
+      "validation_type": "text_presence",
+      "min_length": 3,
+      "expected": "Recognizable generic commodity name (e.g., 'Atta', 'Biscuits', 'Refined Sunflower Oil')"
+    },
+    {
+      "id": "RULE_6_1_C",
+      "clause": "Rule 6(1)(c)",
+      "field": "net_quantity",
+      "title": "Net Quantity Declaration",
+      "severity": "CRITICAL",
+      "description": "The net quantity, in terms of standard unit of weight or measure, of the commodity contained in the package shall be declared plainly and conspicuously.",
+      "required": true,
+      "validation_type": "unit_format",
+      "allowed_units": ["g", "kg", "ml", "l", "pc", "pieces", "units", "m", "cm", "mm"],
+      "forbidden_formats": ["gms", "gram", "grams", "kgs", "kilo", "kilos", "ltr", "litres", "liter", "ml."],
+      "expected": "Standard SI symbols without pluralization (e.g., '500 g', '1 kg', '750 ml', '1 l')"
+    },
+    {
+      "id": "RULE_22",
+      "clause": "Rule 22",
+      "field": "standard_pack_size",
+      "title": "Standard Pack Quantity Norms (Second Schedule)",
+      "severity": "MINOR",
+      "description": "Quantities of commodities specified in the Second Schedule shall be packed and sold only in standard metric units prescribed.",
+      "required": false,
+      "validation_type": "schedule_ii_standard_weight",
+      "expected": "Must conform to standard denominations (e.g. 50g, 100g, 200g, 500g, 1kg, 2kg, 5kg)"
+    },
+    {
+      "id": "RULE_6_1_D",
+      "clause": "Rule 6(1)(d)",
+      "field": "manufacturing_date",
+      "title": "Month and Year of Manufacture / Packing / Import",
+      "severity": "MAJOR",
+      "description": "The month and year in which the commodity is manufactured or pre-packed or imported shall be declared on every package.",
+      "required": true,
+      "validation_type": "date_format",
+      "valid_patterns": ["^(0[1-9]|1[0-2])\\/(20\\d{2}|\\d{2})$", "^(0[1-9]|1[0-2])-(20\\d{2}|\\d{2})$", "^(0[1-9]|[12]\\d|3[01])\\/(0[1-9]|1[0-2])\\/20\\d{2}$"],
+      "expected": "Valid date string in MM/YYYY, MM/YY or DD/MM/YYYY format"
+    },
+    {
+      "id": "RULE_6_1_E",
+      "clause": "Rule 6(1)(e)",
+      "field": "mrp",
+      "title": "Maximum Retail Price (MRP) Declaration",
+      "severity": "CRITICAL",
+      "description": "The retail sale price of the package shall clearly state Maximum Retail Price or MRP, inclusive of all taxes.",
+      "required": true,
+      "validation_type": "mrp_presence",
+      "expected": "Clear monetary declaration with prefix 'MRP Rs.' or '₹' followed by numeric price"
+    },
+    {
+      "id": "RULE_18",
+      "clause": "Rule 18",
+      "field": "mrp_format",
+      "title": "MRP Inclusive of All Taxes Mandate",
+      "severity": "MAJOR",
+      "description": "No package shall be sold at a price higher than the MRP. The price declaration must explicitly indicate 'incl. of all taxes' or 'inclusive of all taxes'.",
+      "required": true,
+      "validation_type": "regex_match",
+      "pattern": "(incl\\.?\\s*of\\s*all\\s*taxes|inclusive\\s*of\\s*all\\s*taxes)",
+      "expected": "Mandatory suffix '(incl. of all taxes)' or 'inclusive of all taxes'"
+    },
+    {
+      "id": "RULE_6_1_F",
+      "clause": "Rule 6(1)(f)",
+      "field": "consumer_care",
+      "title": "Consumer Care Helpline & Redressal Mechanism",
+      "severity": "MAJOR",
+      "description": "Name, address, telephone number and email address of the person who can be contacted by the consumer in case of a complaint or query.",
+      "required": true,
+      "validation_type": "consumer_care_completeness",
+      "required_elements": ["phone_or_tollfree", "email"],
+      "expected": "At least one consumer care phone number/toll-free and one email ID"
+    },
+    {
+      "id": "RULE_8",
+      "clause": "Rule 8",
+      "field": "font_size",
+      "title": "Minimum Height of Numeral and Letters (Rule 8 Table 1)",
+      "severity": "MAJOR",
+      "description": "Minimum height of numerals and letters for declarations based on net weight/volume: ≤50g/ml: 1.0mm; 50g-100g/ml: 1.5mm; 100g-200g/ml: 2.0mm; 200g-500g/ml: 2.5mm; 500g-1kg/l: 4.0mm; >1kg/l: 6.0mm.",
+      "required": true,
+      "validation_type": "font_height_mm",
+      "size_brackets": [
+        {"max_qty_g": 50, "min_height_mm": 1.0},
+        {"max_qty_g": 100, "min_height_mm": 1.5},
+        {"max_qty_g": 200, "min_height_mm": 2.0},
+        {"max_qty_g": 500, "min_height_mm": 2.5},
+        {"max_qty_g": 1000, "min_height_mm": 4.0},
+        {"max_qty_g": 999999, "min_height_mm": 6.0}
+      ],
+      "expected": "Font size in mm meeting or exceeding the minimum statutory height for package weight"
+    },
+    {
+      "id": "RULE_6",
+      "clause": "Rule 6",
+      "field": "language",
+      "title": "Statutory Language (Hindi in Devanagari or English)",
+      "severity": "MAJOR",
+      "description": "Every declaration shall be in either Hindi in Devanagari script or in English, in addition to any other language.",
+      "required": true,
+      "validation_type": "language_check",
+      "allowed_languages": ["en", "hi"],
+      "expected": "Declarations in English or Hindi (Devanagari)"
+    },
+    {
+      "id": "RULE_5_7",
+      "clause": "Rule 5, 7",
+      "field": "principal_display_panel",
+      "title": "Placement on Principal Display Panel (PDP)",
+      "severity": "MAJOR",
+      "description": "Mandatory declarations shall be grouped together and placed prominently on the Principal Display Panel where a consumer can readily view it.",
+      "required": true,
+      "validation_type": "panel_placement",
+      "expected": "Mandatory declarations situated on the Principal Display Panel (PDP)"
+    },
+    {
+      "id": "RULE_27",
+      "clause": "Rule 27",
+      "field": "country_of_origin",
+      "title": "Country of Origin for Imported Packages",
+      "severity": "CRITICAL",
+      "description": "In case of packages containing imported goods, the name of the country where goods were manufactured or packed shall be clearly mentioned.",
+      "required": false,
+      "validation_type": "import_origin_presence",
+      "expected": "Country of origin explicitly declared if package is an import (e.g. 'Country of Origin: Spain')"
+    }
+  ]
+}
