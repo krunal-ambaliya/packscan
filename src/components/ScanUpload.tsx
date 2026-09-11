@@ -264,17 +264,31 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete, onSelect
         scannedAt: backendData.scanned_at,
         officerEmail: 'inspector.delhi@doca.gov.in',
         state: backendData.state,
-        extractedFields: backendData.extracted_fields.map((f: any) => ({
-          id: f.id,
-          fieldName: f.field_name,
-          label: f.field_name,
-          value: f.value,
-          bbox: f.bbox,
-          confidence: f.confidence,
-          fontMm: f.font_mm,
-          statutoryRequiredFontMm: 2.5,
-          hasViolation: backendData.violations.some((v: any) => v.field === f.field_name),
-        })),
+        extractedFields: backendData.extracted_fields.map((f: any) => {
+          const labelMap: Record<string, string> = {
+            manufacturer_info: 'Manufacturer / Packer Info',
+            net_quantity: 'Net Quantity',
+            mrp: 'Maximum Retail Price (MRP)',
+            mrp_full_text: 'MRP & Tax Declaration',
+            unit_sale_price: 'Unit Sale Price',
+            consumer_care: 'Consumer Care Details',
+            commodity_name: 'Commodity Name',
+            date_declaration_template: 'Batch / Date Template',
+            best_before: 'Best Before / Expiry',
+            country_of_origin: 'Country of Origin',
+          };
+          return {
+            id: f.id,
+            fieldName: f.field_name,
+            label: labelMap[f.field_name] || f.field_name.replace(/_/g, ' ').toUpperCase(),
+            value: f.value,
+            bbox: f.bbox,
+            confidence: f.confidence,
+            fontMm: f.font_mm,
+            statutoryRequiredFontMm: 2.5,
+            hasViolation: backendData.violations.some((v: any) => v.field === f.field_name),
+          };
+        }),
         violations: backendData.violations.map((v: any) => ({
           id: v.id,
           ruleClause: v.rule_clause,

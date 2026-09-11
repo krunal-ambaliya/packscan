@@ -13,9 +13,9 @@ import { CheckCircle2, ShieldCheck, Sparkles, AlertTriangle } from 'lucide-react
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USER);
-  const [activeTab, setActiveTab] = useState<string>('scan');
+  const [activeTab, setActiveTab] = useState<string>('result');
   const [inspections, setInspections] = useState<InspectionRecord[]>(HISTORICAL_INSPECTIONS);
-  const [currentInspection, setCurrentInspection] = useState<InspectionRecord>(BENCHMARK_TEST_PACKS[1]); // Start with wafers violation for dramatic demo
+  const [currentInspection, setCurrentInspection] = useState<InspectionRecord>(BENCHMARK_TEST_PACKS[0]); // Starts with Taj Mahal Tea dossier matching reference layout
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -202,6 +202,97 @@ export default function App() {
     showToast('Field corrected. Deterministic Rule Engine re-evaluated!');
   };
 
+  // Add missing declaration and re-evaluate compliance
+  const handleAddField = (newField: ExtractedField) => {
+    if (!currentInspection) return;
+
+    // Append to extracted fields
+    const updatedFields = [...currentInspection.extractedFields, newField];
+
+    // Clear violations that correspond to this field
+    const remainingViolations = currentInspection.violations.filter((v) => {
+      if (v.field === newField.fieldName) return false;
+      if (newField.fieldName === 'manufacturer_info' && v.ruleClause.includes('6(1)(a)')) return false;
+      if (newField.fieldName === 'net_quantity' && v.ruleClause.includes('6(1)(c)')) return false;
+      if (newField.fieldName === 'mrp' && v.ruleClause.includes('6(1)(e)')) return false;
+      if (newField.fieldName === 'mfg_date' && v.ruleClause.includes('6(1)(d)')) return false;
+      if (newField.fieldName === 'consumer_care' && v.ruleClause.includes('6(1)(n)')) return false;
+      if (newField.fieldName === 'unit_sale_price' && v.ruleClause.includes('6(1)(m)')) return false;
+      return true;
+    });
+
+    const isNowCompliant = remainingViolations.length === 0;
+
+    const updatedInspection: InspectionRecord = {
+      ...currentInspection,
+      extractedFields: updatedFields,
+      violations: remainingViolations,
+      complianceStatus: isNowCompliant ? 'COMPLIANT' : 'NON_COMPLIANT',
+      metrics: {
+        ...currentInspection.metrics,
+        totalViolations: remainingViolations.length,
+        criticalCount: remainingViolations.filter((v) => v.severity === 'CRITICAL').length,
+        majorCount: remainingViolations.filter((v) => v.severity === 'MAJOR').length,
+        minorCount: remainingViolations.filter((v) => v.severity === 'MINOR').length,
+      },
+    };
+
+    setCurrentInspection(updatedInspection);
+    setInspections((prev) =>
+      prev.map((rec) => (rec.id === updatedInspection.id ? updatedInspection : rec))
+    );
+    showToast(`Declaration "${newField.label}" added. Compliance re-evaluated!`);
+  };
+
+  // Certify variable date on crimp/seal for pouch packaging
+  const handleCertifyCrimp = (violationId: string) => {
+    if (!currentInspection) return;
+
+    const remainingViolations = currentInspection.violations.filter(
+      (v) => v.id !== violationId && !v.ruleClause.includes('6(1)(d)') && v.field !== 'mfg_date'
+    );
+
+    const crimpField: ExtractedField = {
+      id: `crimp_cert_${Date.now()}`,
+      fieldName: 'mfg_date',
+      label: 'Date of Mfg / Batch (Crimp Seal)',
+      value: 'Certified on Packaging Crimp / Seal Line',
+      bbox: [40, 15, 350, 40],
+      confidence: 1.0,
+      fontMm: 2.5,
+      statutoryRequiredFontMm: 2.0,
+      hasViolation: false,
+    };
+
+    // Filter out existing placeholder mfg_date if any, or append
+    const updatedFields = [
+      ...currentInspection.extractedFields.filter((f) => f.fieldName !== 'mfg_date'),
+      crimpField,
+    ];
+
+    const isNowCompliant = remainingViolations.length === 0;
+
+    const updatedInspection: InspectionRecord = {
+      ...currentInspection,
+      extractedFields: updatedFields,
+      violations: remainingViolations,
+      complianceStatus: isNowCompliant ? 'COMPLIANT' : 'NON_COMPLIANT',
+      metrics: {
+        ...currentInspection.metrics,
+        totalViolations: remainingViolations.length,
+        criticalCount: remainingViolations.filter((v) => v.severity === 'CRITICAL').length,
+        majorCount: remainingViolations.filter((v) => v.severity === 'MAJOR').length,
+        minorCount: remainingViolations.filter((v) => v.severity === 'MINOR').length,
+      },
+    };
+
+    setCurrentInspection(updatedInspection);
+    setInspections((prev) =>
+      prev.map((rec) => (rec.id === updatedInspection.id ? updatedInspection : rec))
+    );
+    showToast('Rule 6(1)(d) Certified on Crimp/Seal. Status updated!');
+  };
+
   const totalViolationsCount = inspections.reduce(
     (acc, r) => acc + r.violations.length,
     0
@@ -233,6 +324,9 @@ export default function App() {
             inspection={currentInspection}
             onUpdateField={handleUpdateField}
             onGenerateReport={() => setActiveTab('report')}
+            onNavigateToRules={() => setActiveTab('rules')}
+            onAddField={handleAddField}
+            onCertifyCrimp={handleCertifyCrimp}
           />
         )}
 
