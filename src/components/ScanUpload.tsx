@@ -274,7 +274,9 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete, onSelect
             consumer_care: 'Consumer Care Details',
             commodity_name: 'Commodity Name',
             date_declaration_template: 'Batch / Date Template',
+            manufacturing_date: 'Date of Packaging / Mfg Date',
             best_before: 'Best Before / Expiry',
+            batch_number: 'Batch Number',
             country_of_origin: 'Country of Origin',
           };
           return {

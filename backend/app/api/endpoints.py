@@ -52,8 +52,8 @@ PRODUCTS_DB: Dict[str, Dict[str, Any]] = {}
 def seed_demo_data():
     sample_id = "550e8400-e29b-41d4-a716-446655440001"
     INSPECTIONS_DB[sample_id] = {
-        "id": sample_id,
-        "product_id": "prod-001",
+        "id": uuid.UUID(sample_id),
+        "product_id": uuid.uuid4(),
         "product_name": "Aashirvaad Sharbati Select Atta 5kg",
         "brand": "ITC Limited",
         "category": "Packaged Food / Flour",
@@ -65,13 +65,13 @@ def seed_demo_data():
         "officer_email": "inspector.delhi@doca.gov.in",
         "state": "Delhi",
         "extracted_fields": [
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "commodity_name", "value": "100% Pure Whole Wheat Sharbati Atta", "bbox": [60, 80, 420, 45], "confidence": 0.98, "font_mm": 6.8},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "net_quantity", "value": "5 kg", "bbox": [60, 220, 210, 35], "confidence": 0.97, "font_mm": 6.4},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "mrp", "value": "Rs. 340.00", "bbox": [60, 270, 390, 38], "confidence": 0.99, "font_mm": 6.2},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "mrp_full_text", "value": "MRP Rs. 340.00 (incl. of all taxes)", "bbox": [60, 270, 390, 38], "confidence": 0.99, "font_mm": 6.2},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "manufacturing_date", "value": "04/2024", "bbox": [60, 325, 230, 30], "confidence": 0.94, "font_mm": 4.1},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "manufacturer_info", "value": "ITC Limited, 37 J.L. Nehru Road, Kolkata WB 700071", "bbox": [60, 380, 560, 36], "confidence": 0.95, "font_mm": 3.8},
-            {"id": uuid.uuid4(), "inspection_id": sample_id, "field_name": "consumer_care", "value": "1800-425-4444 | itccares@itc.in", "bbox": [60, 435, 480, 30], "confidence": 0.93, "font_mm": 3.6},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "commodity_name", "value": "100% Pure Whole Wheat Sharbati Atta", "bbox": [60, 80, 420, 45], "confidence": 0.98, "font_mm": 6.8},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "net_quantity", "value": "5 kg", "bbox": [60, 220, 210, 35], "confidence": 0.97, "font_mm": 6.4},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "mrp", "value": "Rs. 340.00", "bbox": [60, 270, 390, 38], "confidence": 0.99, "font_mm": 6.2},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "mrp_full_text", "value": "MRP Rs. 340.00 (incl. of all taxes)", "bbox": [60, 270, 390, 38], "confidence": 0.99, "font_mm": 6.2},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "manufacturing_date", "value": "04/2024", "bbox": [60, 325, 230, 30], "confidence": 0.94, "font_mm": 4.1},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "manufacturer_info", "value": "ITC Limited, 37 J.L. Nehru Road, Kolkata WB 700071", "bbox": [60, 380, 560, 36], "confidence": 0.95, "font_mm": 3.8},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id), "field_name": "consumer_care", "value": "1800-425-4444 | itccares@itc.in", "bbox": [60, 435, 480, 30], "confidence": 0.93, "font_mm": 3.6},
         ],
         "violations": [],
         "total_violations": 0,
@@ -82,8 +82,8 @@ def seed_demo_data():
 
     sample_id_2 = "550e8400-e29b-41d4-a716-446655440002"
     INSPECTIONS_DB[sample_id_2] = {
-        "id": sample_id_2,
-        "product_id": "prod-002",
+        "id": uuid.UUID(sample_id_2),
+        "product_id": uuid.uuid4(),
         "product_name": "Crispy Masala Potato Chips",
         "brand": "CrunchCo Foods",
         "category": "Snacks",
@@ -95,12 +95,13 @@ def seed_demo_data():
         "officer_email": "inspector.mumbai@doca.gov.in",
         "state": "Maharashtra",
         "extracted_fields": [
-            {"id": uuid.uuid4(), "inspection_id": sample_id_2, "field_name": "commodity_name", "value": "Potato Chips", "bbox": [70, 70, 300, 40], "confidence": 0.95, "font_mm": 4.2},
-            {"id": uuid.uuid4(), "inspection_id": sample_id_2, "field_name": "net_quantity", "value": "85 g", "bbox": [70, 140, 160, 30], "confidence": 0.92, "font_mm": 2.2},
-            {"id": uuid.uuid4(), "inspection_id": sample_id_2, "field_name": "manufacturer_info", "value": "CrunchCo Foods, Andheri East Mumbai 400069", "bbox": [70, 200, 450, 35], "confidence": 0.91, "font_mm": 2.5},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id_2), "field_name": "commodity_name", "value": "Potato Chips", "bbox": [70, 70, 300, 40], "confidence": 0.95, "font_mm": 4.2},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id_2), "field_name": "net_quantity", "value": "85 g", "bbox": [70, 140, 160, 30], "confidence": 0.92, "font_mm": 2.2},
+            {"id": uuid.uuid4(), "inspection_id": uuid.UUID(sample_id_2), "field_name": "manufacturer_info", "value": "CrunchCo Foods, Andheri East Mumbai 400069", "bbox": [70, 200, 450, 35], "confidence": 0.91, "font_mm": 2.5},
         ],
         "violations": [
             {
+                "id": uuid.uuid4(),
                 "rule_clause": "Rule 6(1)(e)",
                 "field": "mrp",
                 "severity": SeverityEnum.CRITICAL,
@@ -109,6 +110,7 @@ def seed_demo_data():
                 "actual": "Absent",
             },
             {
+                "id": uuid.uuid4(),
                 "rule_clause": "Rule 6(1)(f)",
                 "field": "consumer_care",
                 "severity": SeverityEnum.MAJOR,
@@ -326,8 +328,8 @@ async def upload_package_scan(
     ]
 
     compliance_status = "COMPLIANT" if rule_res.compliant else "NON_COMPLIANT"
-    resolved_barcode = barcode or "8909876543210"
-    resolved_brand = brand or "FMCG Brand"
+    resolved_barcode = barcode or ""
+    resolved_brand = brand or (extracted_dict.get("manufacturer_info", "").split(",")[0].strip() if extracted_dict.get("manufacturer_info") else "Audited Commodity")
 
     # Save raw image locally
     import os
@@ -383,6 +385,7 @@ async def upload_package_scan(
 
     # Cache in memory for 0ms retrieval by GET /scan/{id}
     RECENT_SCANS_CACHE[inspection_id] = detail_resp
+    INSPECTIONS_DB[inspection_id] = detail_resp.model_dump()
 
     # Queue background task for persistent Supabase storage
     background_tasks.add_task(
@@ -430,7 +433,26 @@ async def upload_package_scan(
 
 
 # -------------------------------------------------------------------------
-# 3. GET /api/v1/scan/{id} (Inspection Details + Violations + Bounding Boxes)
+# 3. GET /api/v1/scans/latest (Most Recent Real Scan)
+# -------------------------------------------------------------------------
+@router.get("/scans/latest", response_model=InspectionDetailResponse)
+async def get_latest_scan():
+    """
+    Returns the most recent real scan processed by the OCR & Rule Engine pipeline.
+    """
+    if RECENT_SCANS_CACHE:
+        return list(RECENT_SCANS_CACHE.values())[-1]
+    if INSPECTIONS_DB:
+        first_key = list(INSPECTIONS_DB.keys())[0]
+        data = INSPECTIONS_DB[first_key]
+        if isinstance(data, InspectionDetailResponse):
+            return data
+        return InspectionDetailResponse(**data)
+    raise HTTPException(status_code=404, detail="No scans available in pipeline.")
+
+
+# -------------------------------------------------------------------------
+# 4. GET /api/v1/scan/{id} (Inspection Details + Violations + Bounding Boxes)
 # -------------------------------------------------------------------------
 @router.get("/scan/{inspection_id}", response_model=InspectionDetailResponse)
 async def get_scan_details(inspection_id: str, db: AsyncSession = Depends(get_db)):

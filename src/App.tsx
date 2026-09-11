@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ScanUpload } from './components/ScanUpload';
 import { InspectionResult } from './components/InspectionResult';
@@ -8,14 +8,14 @@ import { ReportViewer } from './components/ReportViewer';
 import { RulesExplorer } from './components/RulesExplorer';
 import { CodebaseExplorer } from './components/CodebaseExplorer';
 import { BENCHMARK_TEST_PACKS, HISTORICAL_INSPECTIONS, INITIAL_USER } from './data/mockData';
-import { InspectionRecord, User, UserRole, Violation } from './types';
-import { CheckCircle2, ShieldCheck, Sparkles, AlertTriangle } from 'lucide-react';
+import { ExtractedField, InspectionRecord, User, UserRole, Violation } from './types';
+import { CheckCircle2, ShieldCheck, Sparkles, AlertTriangle, Camera, FileText, ArrowRight } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USER);
-  const [activeTab, setActiveTab] = useState<string>('result');
+  const [activeTab, setActiveTab] = useState<string>('scan');
   const [inspections, setInspections] = useState<InspectionRecord[]>(HISTORICAL_INSPECTIONS);
-  const [currentInspection, setCurrentInspection] = useState<InspectionRecord>(BENCHMARK_TEST_PACKS[0]); // Starts with Taj Mahal Tea dossier matching reference layout
+  const [currentInspection, setCurrentInspection] = useState<InspectionRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -330,6 +330,38 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'result' && !currentInspection && (
+          <div className="max-w-xl mx-auto my-16 p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-5 shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-xs">
+              <Camera className="h-8 w-8" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-slate-900">No Package Under Inspection</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                Scan or upload a retail package image to view optical OCR bounding boxes, font metrology, and deterministic LMPC 2011 compliance findings.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => setActiveTab('scan')}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+              >
+                <Camera className="h-4 w-4 text-amber-400" />
+                <span>Go to Scan & Verify</span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+              {inspections.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all"
+                >
+                  View SKU Registry ({inspections.length})
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && <Dashboard />}
 
         {activeTab === 'history' && (
@@ -344,6 +376,29 @@ export default function App() {
             inspection={currentInspection}
             currentUser={currentUser}
           />
+        )}
+
+        {activeTab === 'report' && !currentInspection && (
+          <div className="max-w-xl mx-auto my-16 p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-5 shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mx-auto text-slate-600 shadow-xs">
+              <FileText className="h-8 w-8" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-slate-900">No Inspection Dossier Available</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                Please audit a packaged commodity from the scanner first before generating a Form VI Statutory Notice.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => setActiveTab('scan')}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 shadow-sm"
+              >
+                <Camera className="h-4 w-4 text-amber-400" />
+                <span>Go to Scan & Verify</span>
+              </button>
+            </div>
+          </div>
         )}
 
         {activeTab === 'rules' && <RulesExplorer />}

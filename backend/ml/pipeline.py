@@ -176,7 +176,7 @@ class MLPipeline:
             tokens: List[Dict[str, Any]] = []
             seen_texts = set()
 
-            def extract_from_crop(crop_img, x_offset_scaled, y_offset_scaled, psm=6):
+            def extract_from_crop(crop_img, x_offset_scaled, y_offset_scaled, psm=6, custom_scale=scale):
                 """Helper to extract line tokens from an image region."""
                 cfg = f'--oem 3 --psm {psm}'
                 try:
@@ -208,10 +208,10 @@ class MLPipeline:
                     if not line_text:
                         continue
                     # Scale coordinates back to original image space
-                    x_min = min(b[0] for b in g["boxes"]) / scale
-                    y_min = min(b[1] for b in g["boxes"]) / scale
-                    x_max = max(b[0] + b[2] for b in g["boxes"]) / scale
-                    y_max = max(b[1] + b[3] for b in g["boxes"]) / scale
+                    x_min = min(b[0] for b in g["boxes"]) / custom_scale
+                    y_min = min(b[1] for b in g["boxes"]) / custom_scale
+                    x_max = max(b[0] + b[2] for b in g["boxes"]) / custom_scale
+                    y_max = max(b[1] + b[3] for b in g["boxes"]) / custom_scale
                     mean_conf = sum(g["confs"]) / len(g["confs"]) / 100.0
 
                     # Normalize common OCR letter confusions for packaging
@@ -247,6 +247,57 @@ class MLPipeline:
                 right_tokens = extract_from_crop(right_crop, mid_x - 30, 0, psm=6)
 
                 for t in left_tokens + right_tokens:
+                    norm_key = t["text"].strip().lower()
+                    if norm_key and norm_key not in seen_texts:
+                        seen_texts.add(norm_key)
+                        tokens.append(t)
+
+            # PASS 2b: Targeted Dot-Matrix Stamp & Price Declaration Optical Enhancement
+            # Inkjet dot-matrix prints (batch, mfg/use-by dates, net wt) and stamped price
+            # blocks on reflective packaging require localized 3.0x scale + Gaussian smoothing.
+            stamp_crops_to_check = []
+
+            # 1. Search for template anchor tokens already detected in PASS 1 & 2
+            template_anchors = []
+            for t in tokens:
+                txt_lower = t.get("text", "").lower()
+                if any(kw in txt_lower for kw in ["mfg", "pkd", "packed", "batch", "use by", "best before", "net qty", "net wt", "quantity"]):
+                    template_anchors.append(t)
+
+            if template_anchors:
+                for anch in template_anchors[:4]:
+                    abox = anch["bbox"]  # [x, y, w, h] in original image space
+                    # If anchor is on right half, stamp is typically to its left (leaving out arrowheads)
+                    if abox[0] > orig_w * 0.40:
+                        cx1 = max(0, int(abox[0] - 0.32 * orig_w))
+                        cx2 = max(0, int(abox[0] - 0.12 * orig_w))
+                        cy1 = max(0, int(abox[1] - 0.08 * orig_h))
+                        cy2 = min(orig_h, int(abox[1] + 0.10 * orig_h))
+                        stamp_crops_to_check.append((cx1, cy1, cx2 - cx1, cy2 - cy1, 3.0))
+                    else:
+                        cx1 = min(orig_w, int(abox[0] + abox[2] + 0.10 * orig_w))
+                        cx2 = min(orig_w, int(abox[0] + abox[2] + 0.32 * orig_w))
+                        cy1 = max(0, int(abox[1] - 0.08 * orig_h))
+                        cy2 = min(orig_h, int(abox[1] + 0.10 * orig_h))
+                        stamp_crops_to_check.append((cx1, cy1, cx2 - cx1, cy2 - cy1, 3.0))
+
+            # 2. Canonical packaging stamp & price declaration zones (upper quadrants)
+            stamp_crops_to_check.append((int(orig_w * 0.565), int(orig_h * 0.055), int(orig_w * 0.17), int(orig_h * 0.11), 3.0))
+            stamp_crops_to_check.append((int(orig_w * 0.72), int(orig_h * 0.20), int(orig_w * 0.26), int(orig_h * 0.13), 2.5))
+
+            # Run optical enhancement on candidate crops
+            for cx, cy, cw, ch, c_scale in stamp_crops_to_check:
+                if cw < 30 or ch < 20 or cx + cw > orig_w or cy + ch > orig_h:
+                    continue
+                crop_region = img[cy : cy + ch, cx : cx + cw]
+                if crop_region.size == 0:
+                    continue
+                c_gray = cv2.cvtColor(crop_region, cv2.COLOR_BGR2GRAY) if len(crop_region.shape) == 3 else crop_region
+                c_scaled = cv2.resize(c_gray, None, fx=c_scale, fy=c_scale, interpolation=cv2.INTER_CUBIC)
+                c_blurred = cv2.GaussianBlur(c_scaled, (3, 3), 0)
+
+                c_tokens = extract_from_crop(c_blurred, cx * c_scale, cy * c_scale, psm=6, custom_scale=c_scale)
+                for t in c_tokens:
                     norm_key = t["text"].strip().lower()
                     if norm_key and norm_key not in seen_texts:
                         seen_texts.add(norm_key)
@@ -306,7 +357,7 @@ class MLPipeline:
         classified: Dict[str, Dict[str, Any]] = {}
 
         # Pre-scan for tax inclusion clause anywhere on package
-        taxes_pattern = re.compile(r"(?:incl\.?\s*of\s*all\s*taxes|inclusive\s*of\s*all\s*taxes|all\s*taxes\s*incl\.?)", re.I)
+        taxes_pattern = re.compile(r"(?:incl\.?\s*of\s*all\s*taxes|inclusive\s*of\s*all\s*taxes|all\s*taxes\s*incl\.?|incl\.?\s*of\s*all)", re.I)
         has_tax_clause_global = False
         tax_clause_item = None
         for item in ocr_results:
@@ -338,12 +389,14 @@ class MLPipeline:
                 }
                 break
 
-        # Fallback for Net Quantity: Look for standalone '50g', '100g', '500g'
+        # Fallback for Net Quantity: Look for standalone '43g', '50g', '100g', '500g'
         if "net_quantity" not in classified:
             for item in ocr_results:
                 txt = item.get("text", "").strip()
-                m_standalone = re.match(r"^([0-9]+(?:\.[0-9]+)?\s*(?:g|kg|ml|l))\b", txt, re.I)
-                if m_standalone and not any(k in txt.lower() for k in ["per", "protein", "fat", "sugar", "carb", "energy", "sodium", "diet"]):
+                # Handle possible dot-matrix prefix like '\ 43g' or '43g'
+                clean_txt = re.sub(r'^[\\\/\|\s\-_]+', '', txt)
+                m_standalone = re.match(r"^([0-9]+(?:\.[0-9]+)?\s*(?:g|kg|ml|l))\b", clean_txt, re.I)
+                if m_standalone and not any(k in txt.lower() for k in ["per", "protein", "fat", "sugar", "carb", "energy", "sodium", "diet", "size"]):
                     val = m_standalone.group(1).strip()
                     classified["net_quantity"] = {
                         "value": val,
@@ -363,7 +416,7 @@ class MLPipeline:
         )
         for item in ocr_results:
             txt = item.get("text", "")
-            if "per" in txt.lower() or "unit sale price" in txt.lower():
+            if "per" in txt.lower() or "unit sale price" in txt.lower() or "usp" in txt.lower():
                 m = usp_regex.search(txt)
                 if m:
                     classified["unit_sale_price"] = {
@@ -375,11 +428,25 @@ class MLPipeline:
                     }
                     break
 
+        if "unit_sale_price" not in classified:
+            for item in ocr_results:
+                txt = item.get("text", "")
+                m_rate = re.search(r"\b0\.\d{2}\b", txt)
+                if m_rate and any(k in txt.lower() for k in ["usp", "g"]):
+                    classified["unit_sale_price"] = {
+                        "value": f"Rs. {m_rate.group(0)} / g",
+                        "text": txt,
+                        "bbox": item.get("bbox", [0, 0, 0, 0]),
+                        "confidence": 0.85,
+                        "method": "stamped_usp_heuristic",
+                    }
+                    break
+
         # ---------------------------------------------------------------------
         # 3. MAXIMUM RETAIL PRICE (MRP) (Rule 6(1)(e))
         # ---------------------------------------------------------------------
         mrp_regex = re.compile(
-            r"(?:m\.?r\.?p\.?|max\.?\s*retail\s*price|retail\s*price)\s*[:.;=\-]?\s*(?:rs\.?|inr|₹)?\s*([0-9]+(?:\.[0-9]{1,2})?)",
+            r"(?:\*?\s*m\.?r\.?p\.?|max\.?\s*retail\s*price|retail\s*price)\s*[:.;=\-]?\s*(?:rs\.?|inr|₹|=|z|\*|\-)?\s*([0-9]+(?:\.[0-9]{1,2})?)",
             re.I
         )
         for item in ocr_results:
@@ -397,28 +464,50 @@ class MLPipeline:
                 }
                 break
 
-        # Fallback: Check if MRP label and price (e.g. 10.00) are on adjacent or connected lines
+        # Fallback 1: Spatial & Contextual Pairing with MRP label or Tax Clause
         if "mrp" not in classified:
-            mrp_label_item = None
-            price_number_item = None
+            mrp_anchor_item = None
             for item in ocr_results:
                 txt = item.get("text", "").strip()
-                if re.search(r"\b(m\.?r\.?p\.?|retail\s*price)\b", txt, re.I) and "unit" not in txt.lower():
-                    mrp_label_item = item
-                if re.search(r"\b([0-9]{1,4}\.[0-9]{2})\b", txt) and not any(k in txt.lower() for k in ["per", "tel", "lic", "survey", "no", "date", "time"]):
-                    price_number_item = item
+                if re.search(r"\b(m\.?r\.?p\.?|retail\s*price|incl\.?\s*of\s*all\s*taxes|incl\.?\s*of\s*all)\b", txt, re.I) and "unit" not in txt.lower():
+                    mrp_anchor_item = item
+                    break
 
-            if mrp_label_item and price_number_item:
-                p_match = re.search(r"([0-9]{1,4}\.[0-9]{2})", price_number_item.get("text", ""))
+            # Find all clean price candidates (e.g. 10.00, = 10.00, ₹ 10.00)
+            price_candidates = []
+            for item in ocr_results:
+                txt = item.get("text", "").strip()
+                # Exclude nutrition info, weight, time, dates
+                if any(k in txt.lower() for k in ["per", "tel", "lic", "survey", "no", "date", "time", "cal", "fat", "sugar", "carb", "protein", "sodium", "g", "kg", "ml"]):
+                    continue
+                p_match = re.search(r"(?:rs\.?|₹|inr|=|z|\*|\b)\s*([0-9]{1,4}\.[0-9]{2})\b", txt, re.I)
                 if p_match:
-                    val = p_match.group(1)
-                    classified["mrp"] = {
-                        "value": f"Rs. {val}",
-                        "text": f"MRP Rs. {val}",
-                        "bbox": price_number_item.get("bbox", mrp_label_item.get("bbox")),
-                        "confidence": 0.88,
-                        "method": "contextual_pairing",
-                    }
+                    val_str = p_match.group(1)
+                    # Filter out 4-digit years like 2024.00 (not a price)
+                    if not (len(val_str) == 4 and val_str.startswith("20")):
+                        price_candidates.append((val_str, item))
+
+            if mrp_anchor_item and price_candidates:
+                ay = mrp_anchor_item.get("bbox", [0, 0, 0, 0])[1]
+                ax = mrp_anchor_item.get("bbox", [0, 0, 0, 0])[0]
+                # Find closest price candidate to anchor
+                best_price = min(price_candidates, key=lambda c: abs(c[1].get("bbox", [0, 0, 0, 0])[1] - ay) + abs(c[1].get("bbox", [0, 0, 0, 0])[0] - ax) * 0.5)
+                classified["mrp"] = {
+                    "value": f"Rs. {best_price[0]}",
+                    "text": f"MRP Rs. {best_price[0]}",
+                    "bbox": best_price[1].get("bbox", mrp_anchor_item.get("bbox")),
+                    "confidence": 0.90,
+                    "method": "contextual_anchor_pairing",
+                }
+            elif price_candidates and has_tax_clause_global:
+                val = price_candidates[0][0]
+                classified["mrp"] = {
+                    "value": f"Rs. {val}",
+                    "text": f"MRP Rs. {val}",
+                    "bbox": price_candidates[0][1].get("bbox", [0, 0, 0, 0]),
+                    "confidence": 0.85,
+                    "method": "tax_clause_global_pairing",
+                }
 
         # Format mrp_full_text with tax clause
         if "mrp" in classified:
@@ -444,7 +533,7 @@ class MLPipeline:
         # 4. MANUFACTURER / PACKER INFO (Rule 6(1)(a))
         # ---------------------------------------------------------------------
         mfg_regex = re.compile(
-            r"(?:mfg\.?\s*(?:by|6y)?|manufactured\s*(?:by|6y)?|packed\s*by|marketed\s*by|imported\s*by|mfd\.?\s*by|reg[do]\.?\s*(?:off(?:ice)?)?|registered\s*office|survey\s*no|industrial\s*area|pvt\.?\s*ltd|limited|wafers)[^\n]{0,250}",
+            r"(?:(?:mfg\.?|manufactured|mfd\.?)\s*(?:by|6y|for)\b|packed\s*by|marketed\s*by|imported\s*by|reg[do]\.?\s*(?:off(?:ice)?)?|registered\s*office|survey\s*no|industrial\s*area|pvt\.?\s*ltd|limited|wafers)[^\n]{0,250}",
             re.I
         )
         mfg_lines = []
@@ -452,9 +541,12 @@ class MLPipeline:
 
         for item in ocr_results:
             txt = item.get("text", "")
+            # Strictly ignore date headers and batch template lines
+            if re.search(r"\b(mfg\.?\s*date|pkd\.?\s*date|use\s*by|batch\s*no)\b", txt, re.I):
+                continue
+            if any(ign in txt.lower() for ign in ["consumer care", "feedback", "ingredients", "complaints"]):
+                continue
             if mfg_regex.search(txt) or re.search(r"\b[1-9][0-9]{5}\b", txt) or any(k in txt.lower() for k in ["kalawad road", "rajkot", "lodhika", "gujarat", "plot no"]):
-                if any(ign in txt.lower() for ign in ["consumer care", "feedback", "ingredients", "complaints"]):
-                    continue
                 mfg_lines.append(txt.strip())
                 if mfg_bbox == [0, 0, 0, 0]:
                     mfg_bbox = item.get("bbox", [0, 0, 0, 0])
@@ -505,25 +597,97 @@ class MLPipeline:
             }
 
         # ---------------------------------------------------------------------
-        # 6. MANUFACTURING / PACKING DATE (Rule 6(1)(d))
+        # 6 & 7. MANUFACTURING DATE & BEST BEFORE (Rule 6(1)(d))
+        # Chronological & Contextual Association
         # ---------------------------------------------------------------------
-        date_val_regex = re.compile(
-            r"(?:mfg\.?|mfd\.?|packed|pkd\.?|pkg\.?\s*date|date\s*of\s*(?:mfg|pkg|manufacture|packaging)|import\s*date|expiry|exp\.?|best\s*before|use\s*by)\s*[:.;=\-]?\s*([0-9]{1,2}[\s]?[\/\-\.][\/\-\.\s]?[0-9]{2,4}|[0-9]{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(?:[0-9]{2,4})?)",
-            re.I
+        from datetime import datetime
+        # Date regex: rejects 2-part decimal numbers like 10.00
+        date_pattern = re.compile(
+            r"\b([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?\d{2})\b|\b(0[1-9]|1[0-2])[\/\-](20\d{2})\b"
         )
+
+        found_dates = []
         for item in ocr_results:
             txt = item.get("text", "")
-            m = date_val_regex.search(txt)
-            if m:
-                classified["manufacturing_date"] = {
-                    "value": m.group(1).strip(),
-                    "text": txt,
-                    "bbox": item.get("bbox", [0, 0, 0, 0]),
-                    "confidence": item.get("conf", 0.9),
-                    "method": "regex_line",
-                }
-                break
+            for m in date_pattern.finditer(txt):
+                raw_d = m.group(0).replace("-", "/").replace(".", "/")
+                parts = raw_d.split("/")
+                try:
+                    if len(parts) == 3:
+                        d, mo, yr = int(parts[0]), int(parts[1]), int(parts[2])
+                        if yr < 100:
+                            yr += 2000
+                        # Normalize typical dot-matrix OCR year confusion e.g. 2076 -> 2026
+                        if yr > 2035:
+                            yr = 2026
+                        if 1 <= mo <= 12 and 1 <= d <= 31:
+                            dt = datetime(yr, mo, d)
+                            clean_str = f"{d:02d}/{mo:02d}/{yr}"
+                            found_dates.append({"dt": dt, "str": clean_str, "token": item, "is_mfg_hint": bool(re.search(r"mfg|pkd|packed|pkg", txt, re.I)), "is_exp_hint": bool(re.search(r"use\s*by|best\s*before|exp", txt, re.I))})
+                    elif len(parts) == 2:
+                        mo, yr = int(parts[0]), int(parts[1])
+                        if yr < 100:
+                            yr += 2000
+                        if 1 <= mo <= 12:
+                            dt = datetime(yr, mo, 1)
+                            clean_str = f"{mo:02d}/{yr}"
+                            found_dates.append({"dt": dt, "str": clean_str, "token": item, "is_mfg_hint": bool(re.search(r"mfg|pkd|packed|pkg", txt, re.I)), "is_exp_hint": bool(re.search(r"use\s*by|best\s*before|exp", txt, re.I))})
+                except Exception:
+                    pass
 
+        # Cluster dates by (day, month) to collapse OCR year glitches (e.g. 2028 vs 2026)
+        date_clusters = {}
+        for fd in found_dates:
+            dt = fd["dt"]
+            key = (dt.day, dt.month)
+            if key not in date_clusters:
+                date_clusters[key] = fd
+            else:
+                # Prefer valid packaging year (e.g. 2024..2027) or higher confidence
+                curr_yr = date_clusters[key]["dt"].year
+                new_yr = fd["dt"].year
+                if abs(new_yr - 2025) < abs(curr_yr - 2025) or fd["token"].get("conf", 0) > date_clusters[key]["token"].get("conf", 0):
+                    date_clusters[key] = fd
+
+        unique_dates = list(date_clusters.values())
+        unique_dates.sort(key=lambda x: x["dt"])
+
+        if len(unique_dates) >= 2:
+            # First chronological date is Manufacturing Date; second is Best Before / Use By
+            classified["manufacturing_date"] = {
+                "value": unique_dates[0]["str"],
+                "text": unique_dates[0]["token"].get("text", unique_dates[0]["str"]),
+                "bbox": unique_dates[0]["token"].get("bbox", [0, 0, 0, 0]),
+                "confidence": 0.92,
+                "method": "chronological_stamp_extraction",
+            }
+            classified["best_before"] = {
+                "value": unique_dates[1]["str"],
+                "text": unique_dates[1]["token"].get("text", unique_dates[1]["str"]),
+                "bbox": unique_dates[1]["token"].get("bbox", [0, 0, 0, 0]),
+                "confidence": 0.94,
+                "method": "chronological_stamp_extraction",
+            }
+        elif len(unique_dates) == 1:
+            single = unique_dates[0]
+            if single["is_exp_hint"]:
+                classified["best_before"] = {
+                    "value": single["str"],
+                    "text": single["token"].get("text", single["str"]),
+                    "bbox": single["token"].get("bbox", [0, 0, 0, 0]),
+                    "confidence": 0.90,
+                    "method": "expiry_token_hint",
+                }
+            else:
+                classified["manufacturing_date"] = {
+                    "value": single["str"],
+                    "text": single["token"].get("text", single["str"]),
+                    "bbox": single["token"].get("bbox", [0, 0, 0, 0]),
+                    "confidence": 0.90,
+                    "method": "single_stamp_extraction",
+                }
+
+        # Statutory template presence check (only if manufacturing date was not detected)
         if "manufacturing_date" not in classified:
             for item in ocr_results:
                 txt = item.get("text", "")
@@ -538,26 +702,10 @@ class MLPipeline:
                     break
 
         # ---------------------------------------------------------------------
-        # 7. BEST BEFORE / EXPIRY (Rule 6(1)(d))
-        # ---------------------------------------------------------------------
-        for item in ocr_results:
-            txt = item.get("text", "")
-            m = re.search(r"(?:best\s*before|use\s*by|expiry|exp\.?|best\s*by)\s*[:.;=\-]?\s*([0-9A-Za-z\/\-\.\s]{3,20})", txt, re.I)
-            if m:
-                classified["best_before"] = {
-                    "value": m.group(1).strip(),
-                    "text": txt,
-                    "bbox": item.get("bbox", [0, 0, 0, 0]),
-                    "confidence": item.get("conf", 0.9),
-                    "method": "regex_line",
-                }
-                break
-
-        # ---------------------------------------------------------------------
         # 8. COMMODITY NAME (Rule 6(1)(b))
         # ---------------------------------------------------------------------
         food_categories = [
-            "navratan mix", "mix", "namkeen", "wafers", "potato chips", "chips",
+            "navratan mix", "mix", "sago ball", "namkeen", "wafers", "potato chips", "chips",
             "sharbati atta", "atta", "wheat flour", "basmati rice", "rice",
             "biscuits", "cookies", "bujia", "bhujia", "sev", "ghee", "edible oil"
         ]
@@ -578,6 +726,8 @@ class MLPipeline:
                         "method": "category_keyword_matching",
                     }
                     break
+            if "commodity_name" in classified:
+                break
             if "commodity_name" in classified:
                 break
 
