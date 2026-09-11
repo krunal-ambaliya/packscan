@@ -111,7 +111,13 @@ docker compose up --build
 ```
 *(To run in background detached mode, add `-d`: `docker compose up --build -d`)*
 
-#### 4. Access the Running Services
+#### 4. Run Database Migrations & Seed Data
+Once the containers are running, you must initialize the database schema and populate the realistic demo data:
+```bash
+make migrate && make seed
+```
+
+#### 5. Access the Running Services
 
 | Service | Address | Description |
 | :--- | :--- | :--- |

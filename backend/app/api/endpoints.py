@@ -26,7 +26,7 @@ from backend.app.schemas.schemas import (
     DashboardStatsResponse,
 )
 from backend.app.rules.engine import LMPCRuleEngine
-from backend.app.ml.pipeline import MLPipeline
+from backend.ml.pipeline import MLPipeline
 from backend.app.services.report_generator import generate_compliance_pdf, generate_compliance_docx
 
 router = APIRouter()

@@ -1,156 +1,340 @@
 {
   "version": "2024.1",
   "statute": "Legal Metrology (Packaged Commodities) Rules, 2011",
+  "governing_act": "Legal Metrology Act, 2009",
   "enacted_by": "Department of Consumer Affairs, Ministry of Consumer Affairs, Food and Public Distribution, Government of India",
+  "total_declarations": 10,
   "rules": [
     {
       "id": "RULE_6_1_A",
       "clause": "Rule 6(1)(a)",
       "field": "manufacturer_info",
       "title": "Name and Complete Address of Manufacturer / Packer / Importer",
+      "check_type": "regex",
+      "params": {
+        "pattern": "^(?=.*[1-9][0-9]{5})(?=.*\\b(mfg|manufactured|mfg\\.?\\s*by|packed|pkd|pkd\\.?\\s*by|marketed|mktd|imported|imp\\.?\\s*by|regd\\.?\\s*off|office|address|plot|road|street|lane|industrial|ind\\.?\\s*area|phase|sector|nagar|dist|district|pvt|ltd|limited)\\b).+$",
+        "flags": "is",
+        "require_pincode": true,
+        "pincode_pattern": "\\b[1-9][0-9]{5}\\b",
+        "min_length": 15,
+        "required_components": [
+          "enterprise_name",
+          "premises_or_street",
+          "city_or_district",
+          "state",
+          "pincode"
+        ]
+      },
       "severity": "CRITICAL",
-      "description": "Every package shall bear the name and complete postal address of the manufacturer, or where the manufacturer is not the packer, the name and address of the manufacturer and packer, or for imported goods, the name and address of the importer.",
-      "required": true,
-      "validation_type": "address_presence",
-      "keywords_required": ["mfg", "manufactured", "packed", "marketed", "imported", "address"],
-      "pincode_required": true,
-      "expected": "Complete physical address with city, state, and 6-digit PIN code"
+      "message_template": "Manufacturer/Packer/Importer declaration for '{field}' is invalid or incomplete: '{actual}'. Must state complete postal address with locality, state, and 6-digit PIN code as required by Rule 6(1)(a).",
+      "example_violation": "Manufactured by ABC Confectionery, Sector 18, Gurugram (Missing mandatory 6-digit postal PIN code and complete physical manufacturing premises address)."
     },
     {
       "id": "RULE_6_1_B",
       "clause": "Rule 6(1)(b)",
       "field": "commodity_name",
-      "title": "Generic or Common Name of the Commodity",
+      "title": "Generic or Common Name of Commodity",
+      "check_type": "presence",
+      "params": {
+        "min_length": 3,
+        "disallowed_generic_terms": [
+          "item",
+          "product",
+          "goods",
+          "commodity",
+          "package",
+          "sample",
+          "n/a",
+          "null",
+          "none"
+        ],
+        "require_standalone_identity": true
+      },
       "severity": "MAJOR",
-      "description": "The common or generic names of the commodity contained in the package and in case of packages with more than one product, the name and quantity of each product shall be mentioned.",
-      "required": true,
-      "validation_type": "text_presence",
-      "min_length": 3,
-      "expected": "Recognizable generic commodity name (e.g., 'Atta', 'Biscuits', 'Refined Sunflower Oil')"
+      "message_template": "Generic or common commodity name for '{field}' is missing or insufficient: detected '{actual}'. Package must prominently declare recognizable generic commodity name under Rule 6(1)(b).",
+      "example_violation": "Package prominently displays fancy brand trademark 'CrunchBlast Gold' but omits the mandatory generic commodity identity 'Potato Chips'."
     },
     {
       "id": "RULE_6_1_C",
-      "clause": "Rule 6(1)(c)",
+      "clause": "Rule 6(1)(c), Rule 22",
       "field": "net_quantity",
-      "title": "Net Quantity Declaration",
+      "title": "Net Quantity in Standard Metric Units",
+      "check_type": "enum",
+      "params": {
+        "allowed_units": [
+          "g",
+          "kg",
+          "ml",
+          "l",
+          "mg",
+          "m",
+          "cm",
+          "mm",
+          "pc",
+          "pieces",
+          "units",
+          "u",
+          "N"
+        ],
+        "forbidden_units": [
+          "gms",
+          "gm",
+          "gram",
+          "grams",
+          "kgs",
+          "kg.",
+          "kilo",
+          "kilos",
+          "ltr",
+          "ltrs",
+          "litres",
+          "liter",
+          "liters",
+          "ml.",
+          "mls",
+          "g."
+        ],
+        "case_sensitive": false,
+        "prohibit_colloquial_pluralization": true,
+        "unit_extraction_pattern": "([0-9]+(?:\\.[0-9]+)?)\\s*([a-zA-Z]+)",
+        "statutory_reference_units": "Rule 22 (Second Schedule)"
+      },
       "severity": "CRITICAL",
-      "description": "The net quantity, in terms of standard unit of weight or measure, of the commodity contained in the package shall be declared plainly and conspicuously.",
-      "required": true,
-      "validation_type": "unit_format",
-      "allowed_units": ["g", "kg", "ml", "l", "pc", "pieces", "units", "m", "cm", "mm"],
-      "forbidden_formats": ["gms", "gram", "grams", "kgs", "kilo", "kilos", "ltr", "litres", "liter", "ml."],
-      "expected": "Standard SI symbols without pluralization (e.g., '500 g', '1 kg', '750 ml', '1 l')"
-    },
-    {
-      "id": "RULE_22",
-      "clause": "Rule 22",
-      "field": "standard_pack_size",
-      "title": "Standard Pack Quantity Norms (Second Schedule)",
-      "severity": "MINOR",
-      "description": "Quantities of commodities specified in the Second Schedule shall be packed and sold only in standard metric units prescribed.",
-      "required": false,
-      "validation_type": "schedule_ii_standard_weight",
-      "expected": "Must conform to standard denominations (e.g. 50g, 100g, 200g, 500g, 1kg, 2kg, 5kg)"
+      "message_template": "Net quantity unit for '{field}' uses non-standard or illegal notation: '{actual}'. Only approved SI metric symbols ({allowed_units}) without pluralization are permitted under Rule 6(1)(c) and Rule 22.",
+      "example_violation": "Net weight declared as 'Net Weight: 500 gms' or '1 Kgs' instead of statutory SI metric symbols '500 g' or '1 kg' as required by Rule 22."
     },
     {
       "id": "RULE_6_1_D",
       "clause": "Rule 6(1)(d)",
       "field": "manufacturing_date",
       "title": "Month and Year of Manufacture / Packing / Import",
+      "check_type": "regex",
+      "params": {
+        "pattern": "^((0[1-9]|1[0-2])[\\/\\-\\.](20\\d{2}|\\d{2})|([0-2][0-9]|3[01])[\\/\\-\\.](0[1-9]|1[0-2])[\\/\\-\\.](20\\d{2}|\\d{2})|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\\s\\-\\.,]+(20\\d{2}|\\d{2}))$",
+        "flags": "i",
+        "accepted_formats": [
+          "MM/YYYY",
+          "MM/YY",
+          "MM-YYYY",
+          "DD/MM/YYYY",
+          "DD-MM-YYYY",
+          "Month YYYY"
+        ],
+        "require_month_and_year": true
+      },
       "severity": "MAJOR",
-      "description": "The month and year in which the commodity is manufactured or pre-packed or imported shall be declared on every package.",
-      "required": true,
-      "validation_type": "date_format",
-      "valid_patterns": ["^(0[1-9]|1[0-2])\\/(20\\d{2}|\\d{2})$", "^(0[1-9]|1[0-2])-(20\\d{2}|\\d{2})$", "^(0[1-9]|[12]\\d|3[01])\\/(0[1-9]|1[0-2])\\/20\\d{2}$"],
-      "expected": "Valid date string in MM/YYYY, MM/YY or DD/MM/YYYY format"
+      "message_template": "Date of manufacture/packing/import for '{field}' has non-compliant format: '{actual}'. Must state month and year in approved statutory format (e.g. MM/YYYY or DD/MM/YYYY) as per Rule 6(1)(d).",
+      "example_violation": "Pre-packed box printed with 'Pkd Date: 2024' or 'Best Before 6 Months' lacking the mandatory specific calendar month and year."
     },
     {
       "id": "RULE_6_1_E",
-      "clause": "Rule 6(1)(e)",
+      "clause": "Rule 6(1)(e), Rule 18",
       "field": "mrp",
-      "title": "Maximum Retail Price (MRP) Declaration",
+      "title": "Maximum Retail Price (MRP) & Tax Inclusivity Mandate",
+      "check_type": "range",
+      "params": {
+        "min_value": 0.01,
+        "max_value": 1000000.0,
+        "currency": "INR",
+        "currency_symbols": ["₹", "Rs.", "Rs", "INR"],
+        "allow_zero": false,
+        "require_tax_clause": true,
+        "tax_clause_pattern": "(incl\\.?\\s*of\\s*all\\s*taxes|inclusive\\s*of\\s*all\\s*taxes|all\\s*taxes\\s*incl\\.?)",
+        "tax_statutory_reference": "Rule 18"
+      },
       "severity": "CRITICAL",
-      "description": "The retail sale price of the package shall clearly state Maximum Retail Price or MRP, inclusive of all taxes.",
-      "required": true,
-      "validation_type": "mrp_presence",
-      "expected": "Clear monetary declaration with prefix 'MRP Rs.' or '₹' followed by numeric price"
-    },
-    {
-      "id": "RULE_18",
-      "clause": "Rule 18",
-      "field": "mrp_format",
-      "title": "MRP Inclusive of All Taxes Mandate",
-      "severity": "MAJOR",
-      "description": "No package shall be sold at a price higher than the MRP. The price declaration must explicitly indicate 'incl. of all taxes' or 'inclusive of all taxes'.",
-      "required": true,
-      "validation_type": "regex_match",
-      "pattern": "(incl\\.?\\s*of\\s*all\\s*taxes|inclusive\\s*of\\s*all\\s*taxes)",
-      "expected": "Mandatory suffix '(incl. of all taxes)' or 'inclusive of all taxes'"
+      "message_template": "Maximum Retail Price (MRP) for '{field}' is absent, non-positive, or non-compliant: '{actual}'. Must be a valid retail price between {min_value} and {max_value} {currency} accompanied by mandatory '(incl. of all taxes)' clause under Rule 6(1)(e) and Rule 18.",
+      "example_violation": "Retail price stated as 'MRP Rs. 150.00' omitting the mandatory statutory phrase '(incl. of all taxes)', or price is completely absent."
     },
     {
       "id": "RULE_6_1_F",
       "clause": "Rule 6(1)(f)",
       "field": "consumer_care",
-      "title": "Consumer Care Helpline & Redressal Mechanism",
+      "title": "Consumer Care Details & Grievance Redressal Mechanism",
+      "check_type": "regex",
+      "params": {
+        "phone_pattern": "(?:\\+91[\\-\\s]?)?(?:[6-9][0-9]{9}|1800[\\-\\s]?[0-9]{3,4}[\\-\\s]?[0-9]{3,4}|0[0-9]{2,4}[\\-\\s]?[0-9]{6,8})",
+        "email_pattern": "[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+",
+        "combined_pattern": "(?=.*(?:(?:\\+91[\\-\\s]?)?[6-9][0-9]{9}|1800[\\-\\s]?[0-9]{3,4}[\\-\\s]?[0-9]{3,4}))(?=.*[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+).*",
+        "flags": "is",
+        "require_contact_phone_or_tollfree": true,
+        "require_grievance_email": true
+      },
       "severity": "MAJOR",
-      "description": "Name, address, telephone number and email address of the person who can be contacted by the consumer in case of a complaint or query.",
-      "required": true,
-      "validation_type": "consumer_care_completeness",
-      "required_elements": ["phone_or_tollfree", "email"],
-      "expected": "At least one consumer care phone number/toll-free and one email ID"
+      "message_template": "Consumer care declaration for '{field}' is incomplete: '{actual}'. Must provide contact designation/office, valid telephone/toll-free helpline number, and grievance email address as per Rule 6(1)(f).",
+      "example_violation": "Consumer helpline text states 'For customer queries email: support@brand.com' but lacks a statutory telephone or toll-free redressal helpline number."
+    },
+    {
+      "id": "RULE_27",
+      "clause": "Rule 27, Rule 6(1)(n)",
+      "field": "country_of_origin",
+      "title": "Country of Origin for Imported Commodities",
+      "check_type": "presence",
+      "params": {
+        "conditional_on_import": true,
+        "conditional_indicator_fields": ["is_imported", "imported"],
+        "min_length": 2,
+        "disallowed_origins": [
+          "unknown",
+          "foreign",
+          "imported",
+          "n/a",
+          "null"
+        ],
+        "prefix_keywords": [
+          "country of origin",
+          "made in",
+          "product of",
+          "imported from",
+          "manufactured in"
+        ]
+      },
+      "severity": "CRITICAL",
+      "message_template": "Country of origin declaration for '{field}' is missing on imported commodity: '{actual}'. Must explicitly state country of origin (e.g. 'Country of Origin: Spain') under Rule 27 and Rule 6(1)(n).",
+      "example_violation": "Imported Italian Olive Oil bottle lists local importer address in Mumbai but omits the mandatory statutory declaration 'Country of Origin: Italy'."
     },
     {
       "id": "RULE_8",
       "clause": "Rule 8",
       "field": "font_size",
       "title": "Minimum Height of Numeral and Letters (Rule 8 Table 1)",
+      "check_type": "font_mm",
+      "params": {
+        "statutory_reference": "Rule 8 Table 1",
+        "calibration_reference": "EAN-13 Barcode Nominal Module Width (0.33mm)",
+        "brackets": [
+          {
+            "tier": 1,
+            "max_net_qty_g_or_ml": 50,
+            "min_font_height_mm": 1.0,
+            "description": "Net quantity up to 50 g or ml: minimum font height 1.0 mm"
+          },
+          {
+            "tier": 2,
+            "min_net_qty_g_or_ml": 50,
+            "max_net_qty_g_or_ml": 100,
+            "min_font_height_mm": 1.5,
+            "description": "Net quantity 50 g/ml to 100 g/ml: minimum font height 1.5 mm"
+          },
+          {
+            "tier": 3,
+            "min_net_qty_g_or_ml": 100,
+            "max_net_qty_g_or_ml": 200,
+            "min_font_height_mm": 2.0,
+            "description": "Net quantity 100 g/ml to 200 g/ml: minimum font height 2.0 mm"
+          },
+          {
+            "tier": 4,
+            "min_net_qty_g_or_ml": 200,
+            "max_net_qty_g_or_ml": 500,
+            "min_font_height_mm": 2.5,
+            "description": "Net quantity 200 g/ml to 500 g/ml: minimum font height 2.5 mm"
+          },
+          {
+            "tier": 5,
+            "min_net_qty_g_or_ml": 500,
+            "max_net_qty_g_or_ml": 1000,
+            "min_font_height_mm": 4.0,
+            "description": "Net quantity 500 g/ml to 1000 g/ml: minimum font height 4.0 mm"
+          },
+          {
+            "tier": 6,
+            "min_net_qty_g_or_ml": 1000,
+            "max_net_qty_g_or_ml": 999999,
+            "min_font_height_mm": 6.0,
+            "description": "Net quantity above 1000 g or ml (1 kg / 1 l): minimum font height 6.0 mm"
+          }
+        ]
+      },
       "severity": "MAJOR",
-      "description": "Minimum height of numerals and letters for declarations based on net weight/volume: ≤50g/ml: 1.0mm; 50g-100g/ml: 1.5mm; 100g-200g/ml: 2.0mm; 200g-500g/ml: 2.5mm; 500g-1kg/l: 4.0mm; >1kg/l: 6.0mm.",
-      "required": true,
-      "validation_type": "font_height_mm",
-      "size_brackets": [
-        {"max_qty_g": 50, "min_height_mm": 1.0},
-        {"max_qty_g": 100, "min_height_mm": 1.5},
-        {"max_qty_g": 200, "min_height_mm": 2.0},
-        {"max_qty_g": 500, "min_height_mm": 2.5},
-        {"max_qty_g": 1000, "min_height_mm": 4.0},
-        {"max_qty_g": 999999, "min_height_mm": 6.0}
-      ],
-      "expected": "Font size in mm meeting or exceeding the minimum statutory height for package weight"
+      "message_template": "Measured font height of {actual} mm for '{field}' is below the statutory requirement of {expected} mm for package size tier under Rule 8 Table 1.",
+      "example_violation": "Numerals for net quantity and MRP on a 1 kg flour pouch measure 1.8 mm, violating the statutory Table 1 requirement of minimum 6.0 mm font height."
     },
     {
-      "id": "RULE_6",
-      "clause": "Rule 6",
+      "id": "RULE_6_2",
+      "clause": "Rule 6(2)",
       "field": "language",
-      "title": "Statutory Language (Hindi in Devanagari or English)",
+      "title": "Mandatory Statutory Language (Hindi or English)",
+      "check_type": "language",
+      "params": {
+        "allowed_languages": ["en", "hi", "english", "hindi"],
+        "allowed_language_codes": ["en", "hi"],
+        "allowed_scripts": ["Latin", "Devanagari"],
+        "allow_additional_regional_languages": true,
+        "primary_language_required": true
+      },
       "severity": "MAJOR",
-      "description": "Every declaration shall be in either Hindi in Devanagari script or in English, in addition to any other language.",
-      "required": true,
-      "validation_type": "language_check",
-      "allowed_languages": ["en", "hi"],
-      "expected": "Declarations in English or Hindi (Devanagari)"
+      "message_template": "Language '{actual}' for mandatory declaration '{field}' violates Rule 6(2). Declarations must be presented in either Hindi in Devanagari script or in English.",
+      "example_violation": "Package printed exclusively in Mandarin or German with no Hindi or English translation sold in the Indian domestic retail market."
     },
     {
       "id": "RULE_5_7",
-      "clause": "Rule 5, 7",
+      "clause": "Rule 5, Rule 7",
       "field": "principal_display_panel",
-      "title": "Placement on Principal Display Panel (PDP)",
+      "title": "Principal Display Panel (PDP) Conspicuous Placement",
+      "check_type": "placement",
+      "params": {
+        "target_panel": "principal_display_panel",
+        "pdp_required": true,
+        "min_pdp_area_percentage": 40.0,
+        "grouping_required": true,
+        "prohibited_locations": [
+          "bottom_crease",
+          "seal_area",
+          "folded_flap",
+          "blind_seam"
+        ],
+        "conspicuous_visibility_required": true
+      },
       "severity": "MAJOR",
-      "description": "Mandatory declarations shall be grouped together and placed prominently on the Principal Display Panel where a consumer can readily view it.",
-      "required": true,
-      "validation_type": "panel_placement",
-      "expected": "Mandatory declarations situated on the Principal Display Panel (PDP)"
+      "message_template": "Mandatory declarations for '{field}' are positioned in an improper or obscured location: '{actual}'. Must be grouped conspicuously on the Principal Display Panel (PDP) under Rules 5 and 7.",
+      "example_violation": "Mandatory retail price and consumer care disclosures hidden under the crimped bottom fold seam rather than positioned prominently on the Principal Display Panel."
+    }
+  ],
+  "supplementary_rules": [
+    {
+      "id": "RULE_18",
+      "clause": "Rule 18",
+      "field": "mrp_format",
+      "title": "MRP Inclusive of All Taxes Mandate",
+      "check_type": "regex",
+      "params": {
+        "pattern": "(incl\\.?\\s*of\\s*all\\s*taxes|inclusive\\s*of\\s*all\\s*taxes|all\\s*taxes\\s*incl\\.?)",
+        "flags": "i"
+      },
+      "severity": "MAJOR",
+      "message_template": "MRP declaration '{actual}' for '{field}' fails to declare '(incl. of all taxes)' or 'inclusive of all taxes' as mandated by Rule 18.",
+      "example_violation": "Price printed as 'MRP Rs 100' without the mandatory statutory phrase '(incl. of all taxes)'."
     },
     {
-      "id": "RULE_27",
-      "clause": "Rule 27",
-      "field": "country_of_origin",
-      "title": "Country of Origin for Imported Packages",
-      "severity": "CRITICAL",
-      "description": "In case of packages containing imported goods, the name of the country where goods were manufactured or packed shall be clearly mentioned.",
-      "required": false,
-      "validation_type": "import_origin_presence",
-      "expected": "Country of origin explicitly declared if package is an import (e.g. 'Country of Origin: Spain')"
+      "id": "RULE_22",
+      "clause": "Rule 22",
+      "field": "net_quantity",
+      "title": "Standard Pack Quantity & Prohibition of Non-Standard Units",
+      "check_type": "enum",
+      "params": {
+        "allowed_units": ["g", "kg", "ml", "l", "pc", "pieces", "units", "N"],
+        "forbidden_units": ["gms", "gram", "grams", "kgs", "kilo", "kilos", "ltr", "litres", "liter", "ml.", "mls"]
+      },
+      "severity": "MINOR",
+      "message_template": "Non-standard unit notation '{actual}' used for '{field}'. Rule 22 strictly prohibits pluralization or colloquial abbreviations.",
+      "example_violation": "Net weight written as '500 grams' or '500 gms' instead of statutory SI symbol '500 g'."
     }
-  ]
+  ],
+  "font_size_table": [
+    { "tier": 1, "max_weight_grams": 50, "min_font_mm": 1.0 },
+    { "tier": 2, "max_weight_grams": 100, "min_font_mm": 1.5 },
+    { "tier": 3, "max_weight_grams": 200, "min_font_mm": 2.0 },
+    { "tier": 4, "max_weight_grams": 500, "min_font_mm": 2.5 },
+    { "tier": 5, "max_weight_grams": 1000, "min_font_mm": 4.0 },
+    { "tier": 6, "max_weight_grams": 999999, "min_font_mm": 6.0 }
+  ],
+  "penalties": {
+    "section_36": {
+      "first_offence_inr": 25000,
+      "second_offence_inr": 50000,
+      "subsequent_offence_inr": 100000
+    },
+    "compounding_provision": "Section 48 Legal Metrology Act, 2009"
+  }
 }

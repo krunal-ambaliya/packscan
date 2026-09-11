@@ -59,7 +59,7 @@ async def init_db() -> None:
     """Creates all database tables defined in Base models on Supabase/PostgreSQL."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ PackScan database tables successfully initialized on Supabase PostgreSQL.")
+    print("[OK] PackScan database tables successfully initialized on Supabase PostgreSQL.")
 
 if __name__ == "__main__":
     import asyncio
