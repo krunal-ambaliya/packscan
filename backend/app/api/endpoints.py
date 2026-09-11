@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 import io
 import uuid
+import logging
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from backend.app.core.security import (
@@ -25,11 +26,20 @@ from backend.app.schemas.schemas import (
     ProductListItem,
     DashboardStatsResponse,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from backend.app.core.database import get_db, AsyncSessionLocal
+from backend.app.models.base import Inspection, ExtractedField, Violation, Product
+
 from backend.app.rules.engine import LMPCRuleEngine
 from backend.ml.pipeline import MLPipeline
 from backend.app.services.report_generator import generate_compliance_pdf, generate_compliance_docx
 
+logger = logging.getLogger("packscan.api")
 router = APIRouter()
+
+# Fast in-memory cache for ultra-low latency response before / alongside DB persistence
+RECENT_SCANS_CACHE: Dict[str, InspectionDetailResponse] = {}
 
 # In-memory mock storage for instantaneous demonstration and zero-cold-start testing
 rule_engine = LMPCRuleEngine()
@@ -178,10 +188,84 @@ async def login(login_data: LoginRequest):
 
 
 # -------------------------------------------------------------------------
+# Background Worker for Supabase Persistence
+# -------------------------------------------------------------------------
+async def persist_inspection_in_background(
+    inspection_id: str,
+    barcode: str,
+    product_name: str,
+    brand: str,
+    category: str,
+    img_filename: str,
+    compliance_status: str,
+    state: str,
+    field_objs: list,
+    violation_objs: list,
+):
+    """
+    Asynchronously persists inspection record, products, fields, and violations
+    to Supabase PostgreSQL pooler without blocking the fast HTTP response.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Product).filter(Product.barcode == barcode))
+            product_obj = result.scalars().first()
+            if not product_obj:
+                product_obj = Product(
+                    name=product_name,
+                    brand=brand,
+                    category=category,
+                    barcode=barcode
+                )
+                session.add(product_obj)
+                await session.flush()
+
+            inspection = Inspection(
+                id=uuid.UUID(inspection_id),
+                inspection_code=f"INSP-{str(uuid.uuid4())[:8].upper()}",
+                product_id=product_obj.id,
+                image_url=f"/uploads/{img_filename}",
+                status="COMPLETED",
+                compliance_status=compliance_status,
+                state=state
+            )
+            session.add(inspection)
+
+            for fobj in field_objs:
+                session.add(ExtractedField(
+                    id=fobj["id"],
+                    inspection_id=inspection.id,
+                    field_name=fobj["field_name"],
+                    value=fobj["value"],
+                    bbox_json=fobj["bbox"],
+                    confidence=fobj["confidence"],
+                    font_mm=fobj["font_mm"]
+                ))
+
+            for vobj in violation_objs:
+                session.add(Violation(
+                    id=vobj["id"],
+                    inspection_id=inspection.id,
+                    rule_clause=vobj["rule_clause"],
+                    field=vobj["field"],
+                    severity=vobj["severity"].value,
+                    message=vobj["message"],
+                    expected=vobj["expected"],
+                    actual=vobj["actual"]
+                ))
+
+            await session.commit()
+            logger.info(f"Background DB commit completed for inspection: {inspection_id}")
+    except Exception as e:
+        logger.warning(f"Background DB commit note: {e}")
+
+
+# -------------------------------------------------------------------------
 # 2. POST /api/v1/scan (Upload Package Image)
 # -------------------------------------------------------------------------
 @router.post("/scan", response_model=ScanUploadResponse)
 async def upload_package_scan(
+    background_tasks: BackgroundTasks,
     image: Optional[UploadFile] = File(None),
     product_name: Optional[str] = Form(None),
     brand: Optional[str] = Form(None),
@@ -190,8 +274,8 @@ async def upload_package_scan(
     state: Optional[str] = Form("Delhi"),
 ):
     """
-    Accepts commodity packaging image, kicks off asynchronous ML pipeline & rule engine,
-    and returns immediate inspection_id for polling.
+    Accepts commodity packaging image, runs native ML pipeline & rule engine,
+    and returns immediate compliance verification and extraction data in ~1.5s.
     """
     inspection_id = str(uuid.uuid4())
     img_filename = f"scan_{inspection_id}.jpg"
@@ -199,13 +283,15 @@ async def upload_package_scan(
     if image:
         image_bytes = await image.read()
 
-    # Run pipeline & rule evaluation
-    pipeline_res = ml_pipeline.process_package_scan(image_bytes)
+    # Run ML pipeline (Tesseract native OCR + spatial tokens + scale calibration)
+    pipeline_res_obj = ml_pipeline.run_full_pipeline(image_bytes)
+    pipeline_res = pipeline_res_obj.model_dump()
     classified_fields = pipeline_res.get("classified_fields", {})
     font_metrics = pipeline_res.get("font_metrics", {})
     panel_info = pipeline_res.get("panel", {})
 
     extracted_dict = {k: v.get("value") for k, v in classified_fields.items()}
+    resolved_name = product_name or extracted_dict.get("commodity_name", "Packaged Commodity")
     if product_name:
         extracted_dict["commodity_name"] = product_name
 
@@ -240,33 +326,106 @@ async def upload_package_scan(
     ]
 
     compliance_status = "COMPLIANT" if rule_res.compliant else "NON_COMPLIANT"
+    resolved_barcode = barcode or "8909876543210"
+    resolved_brand = brand or "FMCG Brand"
 
-    INSPECTIONS_DB[inspection_id] = {
-        "id": inspection_id,
-        "product_id": str(uuid.uuid4()),
-        "product_name": product_name or extracted_dict.get("commodity_name", "Packaged Commodity"),
-        "brand": brand or "FMCG Brand",
-        "category": category,
-        "barcode": barcode or "8909876543210",
-        "image_url": f"/uploads/{img_filename}",
-        "status": "COMPLETED",
-        "compliance_status": compliance_status,
-        "scanned_at": datetime.utcnow(),
-        "officer_email": "officer@doca.gov.in",
-        "state": state,
-        "extracted_fields": field_objs,
-        "violations": violation_objs,
-        "total_violations": rule_res.total_violations,
-        "critical_count": rule_res.critical_count,
-        "major_count": rule_res.major_count,
-        "minor_count": rule_res.minor_count,
-    }
+    # Save raw image locally
+    import os
+    upload_dir = "uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    if image_bytes:
+        with open(os.path.join(upload_dir, img_filename), "wb") as f:
+            f.write(image_bytes)
+
+    # Assemble complete inspection response
+    detail_resp = InspectionDetailResponse(
+        id=uuid.UUID(inspection_id),
+        product_id=uuid.uuid4(),
+        product_name=resolved_name,
+        brand=resolved_brand,
+        category=category,
+        barcode=resolved_barcode,
+        image_url=f"/uploads/{img_filename}",
+        status="COMPLETED",
+        compliance_status=compliance_status,
+        scanned_at=datetime.utcnow(),
+        officer_email="inspector.delhi@doca.gov.in",
+        state=state,
+        extracted_fields=[
+            ExtractedFieldResponse(
+                id=f["id"],
+                inspection_id=uuid.UUID(inspection_id),
+                field_name=f["field_name"],
+                value=f["value"],
+                bbox=f["bbox"],
+                confidence=f["confidence"],
+                font_mm=f["font_mm"],
+            )
+            for f in field_objs
+        ],
+        violations=[
+            ViolationResponse(
+                id=v["id"],
+                rule_clause=v["rule_clause"],
+                field=v["field"],
+                severity=v["severity"],
+                message=v["message"],
+                expected=v["expected"],
+                actual=v["actual"],
+            )
+            for v in violation_objs
+        ],
+        total_violations=len(violation_objs),
+        critical_count=sum(1 for v in violation_objs if v["severity"] == SeverityEnum.CRITICAL),
+        major_count=sum(1 for v in violation_objs if v["severity"] == SeverityEnum.MAJOR),
+        minor_count=sum(1 for v in violation_objs if v["severity"] == SeverityEnum.MINOR),
+    )
+
+    # Cache in memory for 0ms retrieval by GET /scan/{id}
+    RECENT_SCANS_CACHE[inspection_id] = detail_resp
+
+    # Queue background task for persistent Supabase storage
+    background_tasks.add_task(
+        persist_inspection_in_background,
+        inspection_id=inspection_id,
+        barcode=resolved_barcode,
+        product_name=resolved_name,
+        brand=resolved_brand,
+        category=category,
+        img_filename=img_filename,
+        compliance_status=compliance_status,
+        state=state,
+        field_objs=field_objs,
+        violation_objs=violation_objs,
+    )
 
     return ScanUploadResponse(
         inspection_id=uuid.UUID(inspection_id),
         status="COMPLETED",
         message="Package scan processed and audited against LMPC Rules 2011 successfully.",
         estimated_wait_sec=0.5,
+        inspection=detail_resp,
+        ocr_tokens=pipeline_res.get("ocr_tokens", []),
+        classified_fields={
+            fname: {
+                "value": fdata.get("value"),
+                "method": fdata.get("method"),
+                "confidence": fdata.get("confidence"),
+                "text": fdata.get("text"),
+                "bbox": fdata.get("bbox"),
+            }
+            for fname, fdata in classified_fields.items()
+        },
+        pipeline_debug={
+            "total_ocr_tokens": len(pipeline_res.get("ocr_tokens", [])),
+            "classified_field_count": len(classified_fields),
+            "violation_count": len(violation_objs),
+            "compliance_status": compliance_status,
+            "detected_language": pipeline_res.get("detected_language"),
+            "pipeline_elapsed_ms": pipeline_res.get("pipeline_elapsed_ms"),
+            "font_metrics": font_metrics,
+            "panel_info": panel_info,
+        },
     )
 
 
@@ -274,14 +433,62 @@ async def upload_package_scan(
 # 3. GET /api/v1/scan/{id} (Inspection Details + Violations + Bounding Boxes)
 # -------------------------------------------------------------------------
 @router.get("/scan/{inspection_id}", response_model=InspectionDetailResponse)
-async def get_scan_details(inspection_id: str):
+async def get_scan_details(inspection_id: str, db: AsyncSession = Depends(get_db)):
     """
     Returns full inspection record, bounding box coordinates for canvas overlay,
     extracted fields, and rule violations.
     """
-    if inspection_id not in INSPECTIONS_DB:
+    if inspection_id in RECENT_SCANS_CACHE:
+        return RECENT_SCANS_CACHE[inspection_id]
+
+    from sqlalchemy.orm import selectinload
+    stmt = select(Inspection).options(selectinload(Inspection.extracted_fields), selectinload(Inspection.violations), selectinload(Inspection.product)).filter(Inspection.id == uuid.UUID(inspection_id))
+    result = await db.execute(stmt)
+    inspection_obj = result.scalars().first()
+    
+    if not inspection_obj:
         raise HTTPException(status_code=404, detail=f"Inspection record '{inspection_id}' not found.")
-    data = INSPECTIONS_DB[inspection_id]
+        
+    data = {
+        "id": str(inspection_obj.id),
+        "product_id": str(inspection_obj.product_id),
+        "product_name": inspection_obj.product.name if inspection_obj.product else "Unknown",
+        "brand": inspection_obj.product.brand if inspection_obj.product else None,
+        "category": inspection_obj.product.category if inspection_obj.product else None,
+        "barcode": inspection_obj.product.barcode if inspection_obj.product else None,
+        "image_url": inspection_obj.image_url,
+        "status": inspection_obj.status,
+        "compliance_status": inspection_obj.compliance_status,
+        "scanned_at": inspection_obj.scanned_at,
+        "state": inspection_obj.state,
+        "total_violations": len(inspection_obj.violations),
+        "critical_count": sum(1 for v in inspection_obj.violations if v.severity == "CRITICAL"),
+        "major_count": sum(1 for v in inspection_obj.violations if v.severity == "MAJOR"),
+        "minor_count": sum(1 for v in inspection_obj.violations if v.severity == "MINOR"),
+        "extracted_fields": [
+            {
+                "id": str(ef.id),
+                "inspection_id": str(ef.inspection_id),
+                "field_name": ef.field_name,
+                "value": ef.value,
+                "bbox": ef.bbox_json,
+                "confidence": ef.confidence,
+                "font_mm": ef.font_mm
+            } for ef in inspection_obj.extracted_fields
+        ],
+        "violations": [
+            {
+                "id": str(v.id),
+                "rule_clause": v.rule_clause,
+                "field": v.field,
+                "severity": SeverityEnum(v.severity),
+                "message": v.message,
+                "expected": v.expected,
+                "actual": v.actual
+            } for v in inspection_obj.violations
+        ]
+    }
+    
     return InspectionDetailResponse(**data)
 
 
@@ -419,3 +626,78 @@ async def get_dashboard_stats():
             {"day": "Sun", "inspections": 95, "violations": 28},
         ],
     )
+
+
+# -------------------------------------------------------------------------
+# 9. Rule Management & Custom Rule Endpoints
+# -------------------------------------------------------------------------
+@router.get("/rules")
+async def list_rules():
+    """
+    Returns list of all active statutory and custom user-defined LMPC rules,
+    including their enabled/disabled state and configuration parameters.
+    """
+    rules = rule_engine.get_all_rules()
+    return {"status": "success", "total": len(rules), "rules": rules}
+
+
+@router.post("/rules")
+async def create_custom_rule(rule_payload: Dict[str, Any]):
+    """
+    Allows enforcement officers and administrators to create custom rules
+    and tolerances for specific packaging categories or regional standards.
+    """
+    new_rule = rule_engine.add_custom_rule(rule_payload)
+    return {"status": "success", "message": "Custom rule created successfully", "rule": new_rule}
+
+
+@router.put("/rules/{rule_id}")
+async def update_rule(rule_id: str, update_payload: Dict[str, Any]):
+    """
+    Updates rule properties or toggles enabled/disabled state for any rule.
+    """
+    res = rule_engine.update_rule(rule_id, update_payload)
+    return {"status": "success", "message": f"Rule {rule_id} updated", "rule": res}
+
+
+@router.delete("/rules/{rule_id}")
+async def delete_custom_rule(rule_id: str):
+    """
+    Deletes a user-defined custom rule or re-enables a statutory rule.
+    """
+    deleted = rule_engine.delete_rule(rule_id)
+    return {"status": "success", "message": f"Rule {rule_id} deleted", "deleted": deleted}
+
+
+@router.post("/rules/test")
+async def test_rule_evaluation(test_payload: Dict[str, Any]):
+    """
+    Sandbox endpoint: Evaluates test fields and font metrics against active rules
+    in real time with zero database writes.
+    """
+    fields = test_payload.get("fields", {})
+    font_metrics = test_payload.get("font_metrics", {})
+    panel_info = test_payload.get("panel_info", {"on_pdp": True})
+
+    result = rule_engine.evaluate(fields, font_metrics=font_metrics, panel_info=panel_info)
+    return {
+        "status": "success",
+        "compliant": result.compliant,
+        "total_violations": result.total_violations,
+        "critical_count": result.critical_count,
+        "major_count": result.major_count,
+        "minor_count": result.minor_count,
+        "violations": [
+            {
+                "rule_clause": v.rule_clause,
+                "field": v.field,
+                "severity": v.severity.value,
+                "message": v.message,
+                "expected": v.expected,
+                "actual": v.actual,
+            }
+            for v in result.violations
+        ],
+        "inspected_fields": result.inspected_fields,
+    }
+

@@ -65,6 +65,12 @@ class ScanUploadResponse(BaseModel):
     status: str
     message: str
     estimated_wait_sec: float = 2.0
+    # Full inspection payload returned immediately for instant UI display
+    inspection: Optional['InspectionDetailResponse'] = None
+    # --- Debug / Diagnostic fields (visible in network tab) ---
+    ocr_tokens: Optional[List[Dict[str, Any]]] = None
+    classified_fields: Optional[Dict[str, Any]] = None
+    pipeline_debug: Optional[Dict[str, Any]] = None
 
 
 class InspectionDetailResponse(BaseModel):
@@ -120,3 +126,6 @@ class DashboardStatsResponse(BaseModel):
     violations_by_clause: Dict[str, int]
     state_breakdown: List[Dict[str, Any]]
     recent_trend: List[Dict[str, Any]]
+
+
+ScanUploadResponse.model_rebuild()

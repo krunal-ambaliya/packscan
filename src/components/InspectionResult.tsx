@@ -25,12 +25,18 @@ interface InspectionResultProps {
   inspection: InspectionRecord;
   onUpdateField: (fieldId: string, newValue: string, newFontMm?: number) => void;
   onGenerateReport: () => void;
+  onNavigateToRules?: () => void;
+  onAddField?: (newField: ExtractedField) => void;
+  onCertifyCrimp?: (violationId: string) => void;
 }
 
 export const InspectionResult: React.FC<InspectionResultProps> = ({
   inspection,
   onUpdateField,
   onGenerateReport,
+  onNavigateToRules,
+  onAddField,
+  onCertifyCrimp,
 }) => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [hoveredFieldId, setHoveredFieldId] = useState<string | null>(null);
@@ -39,6 +45,13 @@ export const InspectionResult: React.FC<InspectionResultProps> = ({
   const [editingField, setEditingField] = useState<ExtractedField | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editFontMm, setEditFontMm] = useState<number>(3.0);
+
+  // Add Missing Declaration Modal state
+  const [isAddingField, setIsAddingField] = useState(false);
+  const [newFieldName, setNewFieldName] = useState('manufacturer_info');
+  const [newFieldLabel, setNewFieldLabel] = useState('Manufacturer / Packer Info');
+  const [newFieldValue, setNewFieldValue] = useState('');
+  const [newFieldFontMm, setNewFieldFontMm] = useState(3.0);
 
   const isCompliant = inspection.complianceStatus === 'COMPLIANT';
 
@@ -154,34 +167,6 @@ export const InspectionResult: React.FC<InspectionResultProps> = ({
                 </button>
               ))}
             </div>
-
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1 text-slate-400">
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(0.7, z - 0.1))}
-                className="p-1 hover:text-white hover:bg-slate-800 rounded"
-                title="Zoom Out"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span className="font-mono text-[11px] px-1 text-slate-300 font-semibold">
-                {Math.round(zoomLevel * 100)}%
-              </span>
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(1.5, z + 0.1))}
-                className="p-1 hover:text-white hover:bg-slate-800 rounded"
-                title="Zoom In"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => setZoomLevel(1)}
-                className="p-1 hover:text-white hover:bg-slate-800 rounded ml-1"
-                title="Reset Zoom"
-              >
-                <RotateCcw className="h-3 w-3" />
-              </button>
-            </div>
           </div>
 
           {/* Interactive Packaging Canvas Container */}
@@ -196,77 +181,11 @@ export const InspectionResult: React.FC<InspectionResultProps> = ({
               }}
               className="relative select-none"
             >
-              {/* Simulated Packaging Graphic Container */}
-              <div className="w-full aspect-[3/4] bg-gradient-to-b from-amber-50 via-white to-amber-100/40 rounded-2xl border-4 border-amber-900/40 shadow-2xl p-6 relative overflow-hidden flex flex-col justify-between">
-                {/* Background Package Aesthetics */}
-                <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-700"></div>
-                <div className="absolute right-3 top-6 opacity-10 font-black text-6xl text-slate-900 pointer-events-none">
-                  FMCG
-                </div>
-
-                {/* Simulated Visual Retail Elements */}
-                <div className="space-y-4 relative z-0">
-                  {/* Brand & Product Header */}
-                  <div className="border-b border-amber-300/60 pb-3">
-                    <span className="text-[10px] uppercase tracking-widest font-black text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded">
-                      {inspection.brand}
-                    </span>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight mt-1">
-                      {inspection.productName}
-                    </h3>
-                  </div>
-
-                  {/* Body Content Area */}
-                  <div className="grid grid-cols-2 gap-3 text-slate-800 text-xs">
-                    <div className="bg-white/80 p-2.5 rounded-lg border border-slate-200/80 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                        Net Content
-                      </span>
-                      <span className="text-base font-black text-slate-900">
-                        {inspection.extractedFields.find((f) => f.fieldName === 'net_quantity')?.value || '500 g'}
-                      </span>
-                    </div>
-
-                    <div className="bg-white/80 p-2.5 rounded-lg border border-slate-200/80 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                        Retail Price
-                      </span>
-                      <span className="text-base font-black text-slate-900">
-                        {inspection.extractedFields.find((f) => f.fieldName === 'mrp')?.value || 'MRP Absent'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white/90 p-3 rounded-lg border border-slate-200 text-[11px] text-slate-700 space-y-1">
-                    <p className="font-semibold text-slate-900">
-                      {inspection.extractedFields.find((f) => f.fieldName === 'manufacturer_info')?.value ||
-                        'Manufacturer declaration'}
-                    </p>
-                    <p className="text-slate-500">
-                      Consumer Care: {inspection.extractedFields.find((f) => f.fieldName === 'consumer_care')?.value || 'Helpline Absent'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Footer Barcode Area */}
-                <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500 relative z-0">
-                  <div className="space-y-0.5">
-                    <span className="font-mono font-bold text-slate-800">
-                      EAN-13: {inspection.barcode}
-                    </span>
-                    <p>Optical Target: 0.33mm standard module</p>
-                  </div>
-                  {/* Visual Barcode Graphic */}
-                  <div className="flex items-center gap-[2px] h-9 bg-white p-1 rounded border border-slate-300">
-                    {[4, 2, 6, 1, 3, 5, 2, 4, 1, 3, 2, 5, 1, 4, 2, 3, 5, 2, 1, 4].map((w, idx) => (
-                      <div
-                        key={idx}
-                        style={{ width: `${w}px` }}
-                        className="h-full bg-slate-900"
-                      ></div>
-                    ))}
-                  </div>
-                </div>
+              <img
+                src={inspection.imageUrl}
+                alt="Uploaded Packaging"
+                className="w-full h-auto max-h-[70vh] object-contain rounded shadow-2xl"
+              />
 
                 {/* SVG Bounding Boxes Overlay Layer */}
                 {bboxFilter !== 'NONE' && (
@@ -322,12 +241,11 @@ export const InspectionResult: React.FC<InspectionResultProps> = ({
                     })}
                   </div>
                 )}
-              </div>
             </div>
           </div>
 
-          {/* Canvas Footer Legend */}
-          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+          {/* Canvas Footer Legend and Zoom */}
+          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800 gap-4">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
@@ -338,6 +256,36 @@ export const InspectionResult: React.FC<InspectionResultProps> = ({
                 <span>Deficit / Violation Flagged</span>
               </span>
             </div>
+            
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 text-slate-400 bg-slate-800 p-1 rounded-lg shadow">
+              <button
+                onClick={() => setZoomLevel((z) => Math.max(0.2, z - 0.1))}
+                className="p-1 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                title="Zoom Out"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="font-mono text-[11px] px-2 text-slate-300 font-semibold w-12 text-center">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <button
+                onClick={() => setZoomLevel((z) => Math.min(3.0, z + 0.1))}
+                className="p-1 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                title="Zoom In"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <div className="w-px h-4 bg-slate-600 mx-1"></div>
+              <button
+                onClick={() => setZoomLevel(1)}
+                className="p-1 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                title="Reset Zoom"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+            </div>
+            
             <span className="text-slate-500">Click any box to inspect & correct</span>
           </div>
         </div>
